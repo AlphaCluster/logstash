@@ -66,6 +66,10 @@ class LogStash::Inputs::File < LogStash::Inputs::Base
   # has no effect.
   config :start_position, :validate => [ "beginning", "end"], :default => "end"
 
+  # How logstash should handle blank lines. By default it interprets them but
+  # if you are using the multiline codec this might cause issues.
+  config :ignore_blank_lines, :validate => :boolean, :default => false
+
   public
   def register
     require "addressable/uri"
@@ -131,12 +135,14 @@ class LogStash::Inputs::File < LogStash::Inputs::Base
     hostname = Socket.gethostname
 
     @tail.subscribe do |path, line|
-      @logger.debug? && @logger.debug("Received line", :path => path, :text => line)
-      @codec.decode(line) do |event|
-        decorate(event)
-        event["host"] = hostname if !event.include?("host")
-        event["path"] = path
-        queue << event
+      if !(line.empty? and @ignore_blank_lines)
+        @logger.debug? && @logger.debug("Received line", :path => path, :text => line)
+        @codec.decode(line) do |event|
+          decorate(event)
+          event["host"] = hostname if !event.include?("host")
+          event["path"] = path
+          queue << event
+        end
       end
     end
     finished
